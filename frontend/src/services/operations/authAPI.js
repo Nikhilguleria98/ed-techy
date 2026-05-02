@@ -114,7 +114,6 @@ export function login(email, password, navigate) {
 
       dispatch(setUser({ ...response.data.user, image: userImage }));
       // console.log('User data - ', response.data.user);/
-      localStorage.setItem("token", JSON.stringify(response.data?.token));
 
       localStorage.setItem("user", JSON.stringify({ ...response.data.user, image: userImage }));
 

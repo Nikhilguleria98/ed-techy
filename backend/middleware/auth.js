@@ -9,7 +9,12 @@ require('dotenv').config();
 exports.auth = (req, res, next) => {
     try {
         // extract token by anyone from this 3 ways
-        const token = req.body?.token || req.cookies?.token || req.header('Authorization')?.replace('Bearer ', '');
+        let token = req.body?.token || req.cookies?.token || req.header('Authorization')?.replace('Bearer ', '');
+        
+        // Handle case where token is stringified with quotes (e.g., from old frontend bug)
+        if (token && token.startsWith('"') && token.endsWith('"')) {
+            token = token.slice(1, -1);
+        }
 
         // if token is missing
         if (!token) {

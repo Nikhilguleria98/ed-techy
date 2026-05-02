@@ -71,20 +71,44 @@ export const fetchCourseDetails = async (courseId) => {
 }
 
 // ================ fetch Course Categories ================
+// export const fetchCourseCategories = async () => {
+//   let result = []
+
+//   try {
+//     const response = await apiConnector("GET", COURSE_CATEGORIES_API)
+//     console.log("COURSE_CATEGORIES_API RESPONSE............", response)
+//     if (!response?.data?.success) {
+//       throw new Error("Could Not Fetch Course Categories")
+//     }
+//     result = response?.data?.data
+//   } catch (error) {
+//     console.log("COURSE_CATEGORY_API API ERROR............", error)
+//     toast.error(error.message)
+//   }
+//   return result
+// }
 export const fetchCourseCategories = async () => {
   let result = []
 
   try {
     const response = await apiConnector("GET", COURSE_CATEGORIES_API)
-    console.log("COURSE_CATEGORIES_API RESPONSE............", response)
-    if (!response?.data?.success) {
-      throw new Error("Could Not Fetch Course Categories")
+
+    console.log("COURSE_CATEGORIES_API RESPONSE:", response)
+
+    // ✅ Handle all cases safely
+    if (response?.data?.success) {
+      result = response.data.data
+    } else if (Array.isArray(response?.data)) {
+      result = response.data
+    } else {
+      throw new Error("Invalid category response")
     }
-    result = response?.data?.data
+
   } catch (error) {
-    console.log("COURSE_CATEGORY_API API ERROR............", error)
-    toast.error(error.message)
+    console.log("COURSE_CATEGORY_API ERROR:", error)
+    toast.error("Failed to load categories")
   }
+
   return result
 }
 
@@ -96,7 +120,6 @@ export const addCourseDetails = async (data, token) => {
 
   try {
     const response = await apiConnector("POST", CREATE_COURSE_API, data, {
-      "Content-Type": "multipart/form-data",
       Authorization: `Bearer ${token}`,
     })
     console.log("CREATE COURSE API RESPONSE............", response)
@@ -123,7 +146,6 @@ export const editCourseDetails = async (data, token) => {
 
   try {
     const response = await apiConnector("POST", EDIT_COURSE_API, data, {
-      "Content-Type": "multipart/form-data",
       Authorization: `Bearer ${token}`,
     })
     console.log("EDIT COURSE API RESPONSE............", response)

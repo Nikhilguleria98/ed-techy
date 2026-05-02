@@ -14,126 +14,114 @@ const mongoose = require('mongoose');
 
 // ================ create new course ================
 exports.createCourse = async (req, res) => {
-    try {
-        // extract data
-        let { courseName, courseDescription, whatYouWillLearn, price, category, instructions: _instructions, status, tag: _tag } = req.body;
+  try {
+    let {
+      courseName,
+      courseDescription,
+      whatYouWillLearn,
+      price,
+      category,
+      instructions: _instructions,
+      status,
+      tag: _tag,
+    } = req.body;
 
-        // Convert the tag and instructions from stringified Array to Array
-        const tag = JSON.parse(_tag)
-        const instructions = JSON.parse(_instructions)
+    // ✅ Safe parsing
+    const tag = typeof _tag === "string" ? JSON.parse(_tag) : _tag || [];
+    const instructions =
+      typeof _instructions === "string"
+        ? JSON.parse(_instructions)
+        : _instructions || [];
 
-        // console.log("tag = ", tag)
-        // console.log("instructions = ", instructions)
+    // ✅ Thumbnail safe
+    const thumbnail = req.files?.thumbnailImage || null;
 
-        // get thumbnail of course
-        const thumbnail = req.files?.thumbnailImage;
-
-        // validation
-        if (!courseName || !courseDescription || !whatYouWillLearn || !price
-            || !category || !thumbnail || !instructions.length || !tag.length) {
-            return res.status(400).json({
-                success: false,
-                message: 'All Fileds are required'
-            });
-        }
-
-        if (!status || status === undefined) {
-            status = "Draft";
-        }
-
-        // check current user is instructor or not , bcoz only instructor can create 
-        // we have insert user id in req.user , (payload , while auth ) 
-        const instructorId = req.user.id;
-
-
-        // check given category is valid or not
-        const dbConnected = mongoose.connection.readyState === 1;
-        const categoryDetails = dbConnected
-            ? await Category.findById(category)
-            : getCategoryById(category);
-        if (!categoryDetails) {
-            return res.status(401).json({
-                success: false,
-                message: 'Category Details not found',
-            });
-        }
-
-        let thumbnailUrl = 'https://via.placeholder.com/800x450?text=Course+Thumbnail';
-        if (dbConnected) {
-            const thumbnailDetails = await uploadImageToCloudinary(thumbnail, process.env.FOLDER_NAME);
-            thumbnailUrl = thumbnailDetails?.secure_url || thumbnailUrl;
-        }
-
-        const newCoursePayload = {
-            courseName,
-            courseDescription,
-            instructor: instructorId,
-            whatYouWillLearn,
-            price,
-            category: categoryDetails._id || categoryDetails,
-            tag,
-            status,
-            instructions,
-            thumbnail: thumbnailUrl,
-            createdAt: Date.now(),
-        };
-
-        let newCourse;
-        if (dbConnected) {
-            newCourse = await Course.create(newCoursePayload);
-        } else {
-            const instructorDetails = getUserById(instructorId) || {
-                _id: instructorId,
-                firstName: 'Instructor',
-                lastName: 'User',
-                email: 'instructor@example.com',
-                image: 'https://api.dicebear.com/5.x/initials/svg?seed=Instructor%20User',
-            };
-            newCourse = addCourse({
-                ...newCoursePayload,
-                category: categoryDetails,
-                instructor: instructorDetails,
-            });
-        }
-
-        if (dbConnected) {
-            await User.findByIdAndUpdate(instructorId,
-                {
-                    $push: {
-                        courses: newCourse._id
-                    }
-                },
-                { new: true }
-            );
-
-            await Category.findByIdAndUpdate(
-                { _id: category },
-                {
-                    $push: {
-                        courses: newCourse._id,
-                    },
-                },
-                { new: true }
-            );
-        }
-
-        // return response
-        res.status(200).json({
-            success: true,
-            data: newCourse,
-            message: 'New Course created successfully'
-        })
+    // ✅ Auth check
+    if (!req.user || !req.user.id) {
+      return res.status(401).json({
+        success: false,
+        message: "Unauthorized",
+      });
     }
 
-    catch (error) {
-        console.log('Error while creating new course');
-        console.log(error);
-        res.status(500).json({
-            success: false,
-            error: error.message,
-            message: 'Error while creating new course',
-        });
+    const instructorId = req.user.id;
+
+    // ✅ Validate fields
+    if (
+      !courseName ||
+      !courseDescription ||
+      !whatYouWillLearn ||
+      !price ||
+      !category ||
+      !thumbnail ||
+      tag.length === 0 ||
+      instructions.length === 0
+    ) {
+      return res.status(400).json({
+        success: false,
+        message: "All fields are required",
+      });
     }
+
+    if (!status) status = "Draft";
+
+    // ✅ Validate Mongo ID
+    if (!mongoose.Types.ObjectId.isValid(category)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid category ID",
+      });
+    }
+
+    const categoryDetails = await Category.findById(category);
+    if (!categoryDetails) {
+      return res.status(404).json({
+        success: false,
+        message: "Category not found",
+      });
+    }
+
+    // ✅ Upload image
+    const thumbnailDetails = await uploadImageToCloudinary(
+      thumbnail,
+      process.env.FOLDER_NAME
+    );
+
+    const newCourse = await Course.create({
+      courseName,
+      courseDescription,
+      instructor: instructorId,
+      whatYouWillLearn,
+      price,
+      category,
+      tag,
+      status,
+      instructions,
+      thumbnail: thumbnailDetails.secure_url,
+    });
+
+    // ✅ Update user + category
+    await User.findByIdAndUpdate(instructorId, {
+      $push: { courses: newCourse._id },
+    });
+
+    await Category.findByIdAndUpdate(category, {
+      $push: { courses: newCourse._id },
+    });
+
+    return res.status(200).json({
+      success: true,
+      data: newCourse,
+      message: "Course created successfully",
+    });
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({
+      success: false,
+      message: "Error creating course",
+      error: error.message,
+    });
+  }
 };
 
 

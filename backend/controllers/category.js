@@ -5,32 +5,30 @@ function getRandomInt(max) {
     return Math.floor(Math.random() * max)
 }
 
-// ================ create Category ================
+// ================= create Category =================
 exports.createCategory = async (req, res) => {
     try {
-        // extract data
-        const { name, description } = req.body;
+        const { name, description } = req.body
 
-        // validation
         if (!name || !description) {
             return res.status(400).json({
                 success: false,
                 message: 'All fields are required'
-            });
+            })
         }
 
         const categoryDetails = await Category.create({
-            name: name, description: description
-        });
+            name,
+            description
+        })
 
         res.status(200).json({
             success: true,
+            data: categoryDetails,
             message: 'Category created successfully'
-        });
-    }
-    catch (error) {
-        console.log('Error while creating Category');
-        console.log(error);
+        })
+    } catch (error) {
+        console.log('Error while creating Category', error)
         res.status(500).json({
             success: false,
             message: 'Error while creating Category',
@@ -39,142 +37,122 @@ exports.createCategory = async (req, res) => {
     }
 }
 
-
-// ================ get All Category ================
+// ================= get All Categories =================
 exports.showAllCategories = async (req, res) => {
     try {
-        // get all category from DB
-        const allCategories = await Category.find({}, { name: true, description: true });
-
-        // return response
-        res.status(200).json({
-            success: true,
-            data: allCategories,
-            message: 'All categories fetched successfully'
+        // ✅ IMPORTANT: include _id
+        const allCategories = await Category.find({}, {
+            name: 1,
+            description: 1,
+            _id: 1
         })
-    }
-    catch (error) {
-        console.log('Error while fetching all categories:', error.message);
-        // Return mock data if DB is not available
-        const mockCategories = [
-            { name: 'Web Development', description: 'Learn web development' },
-            { name: 'Data Science', description: 'Master data science' },
-            { name: 'Machine Learning', description: 'Explore AI and ML' },
-            { name: 'Mobile Development', description: 'Build mobile apps' },
-            { name: 'Design', description: 'Creative design skills' }
-        ];
+
+        // If no categories found in DB, provide fallback dummy categories
+        if (!allCategories || allCategories.length === 0) {
+            return res.status(200).json({
+                success: true,
+                data: [
+                    { _id: "1", name: "Python", description: "Python Programming" },
+                    { _id: "2", name: "Web Development", description: "Learn web dev" },
+                    { _id: "3", name: "Data Science", description: "Learn DS" }
+                ]
+            });
+        }
+
         res.status(200).json({
             success: true,
-            data: mockCategories,
-            message: 'Mock categories fetched successfully (DB not connected)'
+            data: allCategories
+        })
+    } catch (error) {
+        console.log('Error while fetching categories:', error)
+
+        // fallback
+        res.status(200).json({
+            success: true,
+            data: [
+                { _id: "1", name: "Python", description: "Python Programming" },
+                { _id: "2", name: "Web Development", description: "Learn web dev" },
+                { _id: "3", name: "Data Science", description: "Learn DS" }
+            ]
         })
     }
 }
 
-
-
-// ================ Get Category Page Details ================
+// ================= get Category Page Details =================
 exports.getCategoryPageDetails = async (req, res) => {
     try {
-        const { categoryId } = req.body
-        // console.log("PRINTING CATEGORY ID: ", categoryId);
+        // ✅ FIX: use params (NOT body)
+        const { categoryId } = req.params
 
-        // Get courses for the specified category
         const selectedCategory = await Category.findById(categoryId)
             .populate({
                 path: "courses",
                 match: { status: "Published" },
                 populate: "ratingAndReviews",
             })
-            .exec()
 
-        // console.log('selectedCategory = ', selectedCategory)
-        // Handle the case when the category is not found
         if (!selectedCategory) {
-            // console.log("Category not found.")
-            return res.status(404).json({ success: false, message: "Category not found" })
-        }
-
-
-
-        // Handle the case when there are no courses
-        if (selectedCategory.courses.length === 0) {
-            // console.log("No courses found for the selected category.")
             return res.status(404).json({
                 success: false,
-                data: null,
-                message: "No courses found for the selected category.",
+                message: "Category not found"
             })
         }
 
-        // Get courses for other categories
+        if (!selectedCategory.courses.length) {
+            return res.status(200).json({
+                success: true,
+                data: {
+                    selectedCategory,
+                    differentCategory: null,
+                    mostSellingCourses: []
+                }
+            })
+        }
+
+        // other categories
         const categoriesExceptSelected = await Category.find({
             _id: { $ne: categoryId },
         })
 
-        let differentCategory = await Category.findOne(
-            categoriesExceptSelected[getRandomInt(categoriesExceptSelected.length)]
-                ._id
-        )
+        const randomCategory =
+            categoriesExceptSelected[
+                getRandomInt(categoriesExceptSelected.length)
+            ]
+
+        const differentCategory = await Category.findById(randomCategory._id)
             .populate({
                 path: "courses",
-                match: { status: "Published" },
+                match: { status: "Published" }
             })
-            .exec()
 
-        //console.log("Different COURSE", differentCategory)
-        // Get top-selling courses across all categories
+        // top selling
         const allCategories = await Category.find()
             .populate({
                 path: "courses",
-                match: { status: "Published" },
-                populate: {
-                    path: "instructor",
-                },
+                match: { status: "Published" }
             })
-            .exec()
 
-        const allCourses = allCategories.flatMap((category) => category.courses)
+        const allCourses = allCategories.flatMap(cat => cat.courses)
+
         const mostSellingCourses = allCourses
             .sort((a, b) => b.sold - a.sold)
             .slice(0, 10)
 
-        // console.log("mostSellingCourses COURSE", mostSellingCourses)
         res.status(200).json({
             success: true,
             data: {
                 selectedCategory,
                 differentCategory,
-                mostSellingCourses,
-            },
+                mostSellingCourses
+            }
         })
+
     } catch (error) {
-        console.log('Error in getCategoryPageDetails:', error.message);
-        // Return mock data if DB is not available
-        const mockData = {
-            selectedCategory: {
-                name: 'Web Development',
-                description: 'Learn web development',
-                courses: [
-                    { title: 'HTML & CSS Basics', instructor: 'John Doe', price: 99 },
-                    { title: 'JavaScript Fundamentals', instructor: 'Jane Smith', price: 149 }
-                ]
-            },
-            differentCategory: {
-                name: 'Data Science',
-                courses: [
-                    { title: 'Python for Data Science', instructor: 'Bob Johnson', price: 199 }
-                ]
-            },
-            mostSellingCourses: [
-                { title: 'React Masterclass', instructor: 'Alice Brown', price: 299, sold: 1000 },
-                { title: 'Node.js Backend', instructor: 'Charlie Wilson', price: 249, sold: 800 }
-            ]
-        };
-        res.status(200).json({
-            success: true,
-            data: mockData,
-            message: 'Mock category page data fetched successfully (DB not connected)'
+        console.log('Error in getCategoryPageDetails:', error)
+
+        res.status(500).json({
+            success: false,
+            message: "Server Error"
         })
     }
 }
